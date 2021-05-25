@@ -4,7 +4,7 @@ trigger:
 
 variables:
 - name: AZSUBSCRIPTION  
-  value: AzCloud
+  value: AZDOManaged
 - name: action
   value: apply
  
