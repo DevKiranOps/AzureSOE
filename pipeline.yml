@@ -1,0 +1,91 @@
+trigger: 
+  - main
+  - feature*
+
+variables:
+- name: AZSUBSCRIPTION  
+  value: AzCloud
+- name: action
+  value: apply
+ 
+stages:
+- stage: SOE 
+  condition: always()
+  jobs:
+  - job: Terraform    
+    workspace:
+      clean: all
+    pool:
+      vmImage: "Ubuntu 18.04"    
+    steps:    
+    - task: DownloadSecureFile@1
+      name: privkey
+      displayName: 'Download Private Key'
+      inputs:
+        secureFile: id_soe
+    - script: |                
+        sudo chmod 400 $(privkey.secureFilePath)
+        cat $(privkey.secureFilePath) > id_rsa
+        sudo mkdir -p $HOME/.ssh        
+    - task: DownloadSecureFile@1
+      name: pubkey
+      displayName: 'Download public Key'
+      inputs:
+        secureFile: id_soe.pub
+    - script: |                
+        sudo chmod 600 $(pubkey.secureFilePath)    
+        cat $(pubkey.secureFilePath) > id_rsa.pub
+        ls -l     
+    - task: AzureCLI@2
+      displayName: 'PreBuild'
+      inputs:
+        azureSubscription: $(AZSUBSCRIPTION)
+        scriptType: bash
+        scriptLocation: scriptPath
+        scriptPath: $(Agent.BuildDirectory)/s/prereq.sh     
+        arguments: $(TFRESOURCEGROUP) $(TFSTORAGEACCOUNT) $(TFCONTAINERNAME) $(RHELTFKEY)
+    - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+      displayName: 'TFinit'
+      inputs:
+        backendServiceArm: $(AZSUBSCRIPTION)
+        workingDirectory: tfFiles
+        backendAzureRmResourceGroupName: $(TFRESOURCEGROUP)
+        backendAzureRmStorageAccountName: $(TFSTORAGEACCOUNT)
+        backendAzureRmContainerName: $(TFCONTAINERNAME)
+        backendAzureRmKey: $(RHELTFKEY)
+    - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+      displayName: 'TFValidate'
+      condition: and(succeeded(), eq('${{variables.action}}', 'apply'))
+      inputs:
+        command: validate
+        workingDirectory: tfFiles
+        environmentServiceNameAzureRM: $(AZSUBSCRIPTION)      
+    - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+      displayName: 'TFBuild'
+      condition: and(succeeded(), eq('${{variables.action}}', 'apply'))
+      timeoutInMinutes: 30
+      inputs:
+        command: apply
+        workingDirectory: tfFiles
+        environmentServiceNameAzureRM: $(AZSUBSCRIPTION)    
+    - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV1@0
+      condition: and(succeeded(), eq('${{variables.action}}', 'destroy'))
+      timeoutInMinutes: 30
+      displayName: 'TFDestroy'    
+      inputs:
+        command: destroy
+        workingDirectory: tfFiles
+        environmentServiceNameAzureRM: $(AZSUBSCRIPTION)
+    - task: AzureCLI@2
+      condition: and(succeeded(), eq('${{variables.action}}', 'apply'))
+      timeoutInMinutes: 45
+      displayName: ImageCreate
+      inputs:
+        azureSubscription: $(AZSUBSCRIPTION)
+        scriptType: bash
+        scriptLocation: scriptPath
+        scriptPath: $(Agent.BuildDirectory)/s/sig.sh        
+        
+          
+
+

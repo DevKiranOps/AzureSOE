@@ -1,0 +1,12 @@
+- hosts: localhost
+  become: true  
+  vars:
+      is_container: false
+
+  roles:
+      - role: ./RHEL8-CIS
+        force_apt_get: True        
+        rhel8cis_skip_for_travis: false
+        rhel8cis_system_is_container: false
+        rhel8cis_rule_1_1_1_2: false
+        rhel8cis_rule_1_1_1_4: false # Disabling UDF is causing issue with the VM creation from image.
